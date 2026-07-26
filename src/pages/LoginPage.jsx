@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import AuthTabs from '../components/auth/AuthTabs';
 import AuthCard from '../components/auth/AuthCard';
@@ -12,7 +12,7 @@ import '../styles/auth/login.css';
  * (لا تضع أي صور داخل src، ولا تستخدم import للصور إطلاقًا)
  */
 const APP_LOGO = '/assets/logo/logo.png';
-const BACKGROUND_IMAGE = '/assets/backgrounds/auth-bg.jpg';
+const BACKGROUND_IMAGE = '/assets/backgrounds/app-background.png';
 
 /**
  * أيقونة زهرة اللوتس — مرسومة يدويًا كـ SVG (رمز مصري قديم غير متوفر في المكتبات الجاهزة)
@@ -43,8 +43,42 @@ const LotusIcon = ({ className }) => (
 const LoginPage = () => {
   const [activeTab, setActiveTab] = useState('login');
 
+  // تطبيق الخلفية على عنصر root (#root)
+  useEffect(() => {
+    const root = document.getElementById('root');
+    if (root) {
+      root.style.backgroundImage = `url(${BACKGROUND_IMAGE})`;
+      root.style.backgroundSize = 'cover';
+      root.style.backgroundPosition = 'center';
+      root.style.backgroundRepeat = 'no-repeat';
+      root.style.minHeight = '100vh';
+    }
+
+    // التنظيف عند إزالة المكون (إلغاء الخلفية)
+    return () => {
+      if (root) {
+        root.style.backgroundImage = '';
+        root.style.backgroundSize = '';
+        root.style.backgroundPosition = '';
+        root.style.backgroundRepeat = '';
+        root.style.minHeight = '';
+      }
+    };
+  }, []);
+
   return (
-    <div className="auth-page">
+    <div
+      className="auth-page"
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        width: '100%',
+        padding: '1rem',
+        // لا توجد خلفية هنا — كل شيء على root
+      }}
+    >
       <div className="auth-page__content">
         {/* ---------- الشعار + اسم التطبيق ---------- */}
         <motion.div
@@ -55,9 +89,9 @@ const LoginPage = () => {
         >
           <motion.div
             className="auth-header__logo-wrap"
-            initial={{ scale: 0.6, opacity: 0 }}
+            initial={{ scale: 1.5, opacity: 0 }}
             animate={{
-              scale: 1,
+              scale: 1.75,
               opacity: 1,
               y: [0, -10, 0],
             }}
@@ -98,14 +132,6 @@ const LoginPage = () => {
         {/* ---------- تسجيل الدخول عبر السوشيال ميديا ---------- */}
         <SocialLogin />
       </div>
-
-      {/* ---------- الرسمة الزخرفية السفلية (تملأ عرض الشاشة بالكامل) ---------- */}
-      <div
-        className="auth-page__bottom-art"
-        style={{ backgroundImage: `url(${BACKGROUND_IMAGE})` }}
-        role="img"
-        aria-label="رسمة زخرفية لمعالم مصرية قديمة"
-      />
     </div>
   );
 };
