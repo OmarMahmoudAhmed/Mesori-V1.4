@@ -5,22 +5,6 @@ import InputField, { fieldVariants } from './InputField';
 import GoldenButton from './GoldenButton';
 import { useApp } from '../../context/AppContext';
 
-/**
- * أيقونة جناحين زخرفية (مستوحاة من الجُعران المجنّح) — مرسومة يدويًا كـ SVG
- * تُستخدم على جانبي نص الزر الرئيسي، لعدم توفر رمز مشابه في المكتبات الجاهزة
- */
-const WingIcon = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path
-      d="M2 12c3-4.2 6.2-4.2 8.2-1.8M22 12c-3-4.2-6.2-4.2-8.2-1.8M10.2 10.2c1 2.2 1 4.4 0 6.2M13.8 10.2c-1 2.2-1 4.4 0 6.2"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 const containerVariants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.1, delayChildren: 0.15 } },
@@ -187,7 +171,7 @@ const AuthCard = ({ activeTab }) => {
             </motion.button>
 
             <motion.div className="auth-card__submit-wrap" variants={fieldVariants}>
-              <GoldenButton type="submit" disabled={submitting} leftIcon={WingIcon} rightIcon={WingIcon}>
+              <GoldenButton type="submit" disabled={submitting}>
                 {submitting ? 'جاري الدخول...' : 'ابدأ الرحلة'}
               </GoldenButton>
             </motion.div>
@@ -235,7 +219,7 @@ const AuthCard = ({ activeTab }) => {
             />
 
             <motion.div className="auth-card__submit-wrap" variants={fieldVariants}>
-              <GoldenButton type="submit" disabled={submitting} leftIcon={WingIcon} rightIcon={WingIcon}>
+              <GoldenButton type="submit" disabled={submitting}>
                 {submitting ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}
               </GoldenButton>
             </motion.div>

@@ -39,8 +39,8 @@ function OnboardingPage() {
       setError('من فضلك اكتب اسمك');
       return;
     }
-    if (!age || isNaN(ageNum) || ageNum < 5 || ageNum > 18) {
-      setError('من فضلك اكتب عمر صحيح (بين 5 و18 سنة)');
+    if (!age || isNaN(ageNum) || ageNum < 5 || ageNum > 100) {
+      setError('من فضلك اكتب عمر صحيح (بين 5 و100 سنة)');
       return;
     }
 

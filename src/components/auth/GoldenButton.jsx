@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 
+/* أيقونة الجناحين الثابتة على جانبي نص الزر (بدل الأيقونة المرسومة يدوياً سابقاً) */
+const WINGS_ICON_SRC = '/assets/icons/badges/Mummy.svg';
+
 /**
  * GoldenButton
  * الزر الذهبي الرئيسي (ابدأ الرحلة / إنشاء الحساب)
@@ -9,12 +12,14 @@ import { motion } from 'framer-motion';
  * - Gradient متحرك + توهج ذهبي (مُعرَّفان في login.css / animations.css)
  * - Scale عند الـ Hover والضغط (Framer Motion)
  * - تأثير Ripple عند الضغط (JS بسيط + CSS keyframes)
+ * - جناحا Isis على الجانبين (نفس ملف SVG، الجانب الأيمن معكوس أفقياً
+ *   بالـ CSS بدل تكرار الملف)
  *
  * Props:
- * - leftIcon / rightIcon: أيقونات زخرفية اختيارية على جانبي النص
  * - disabled: تعطيل الزر (يُستخدم أثناء انتظار رد الخادم)
+ * - showWings: إظهار/إخفاء الجناحين الزخرفيين (افتراضياً true)
  */
-const GoldenButton = ({ children, type = 'button', onClick, disabled = false, leftIcon: LeftIcon, rightIcon: RightIcon }) => {
+const GoldenButton = ({ children, type = 'button', onClick, disabled = false, showWings = true }) => {
   const [ripples, setRipples] = useState([]);
 
   const handleClick = (e) => {
@@ -46,9 +51,13 @@ const GoldenButton = ({ children, type = 'button', onClick, disabled = false, le
       whileTap={disabled ? {} : { scale: 0.96 }}
       transition={{ type: 'spring', stiffness: 400, damping: 18 }}
     >
-      {LeftIcon && <LeftIcon className="golden-button__wing" />}
+      {showWings && (
+        <img src={WINGS_ICON_SRC} alt="" aria-hidden="true" className="golden-button__wing golden-button__wing--left" />
+      )}
       <span>{children}</span>
-      {RightIcon && <RightIcon className="golden-button__wing" />}
+      {showWings && (
+        <img src={WINGS_ICON_SRC} alt="" aria-hidden="true" className="golden-button__wing golden-button__wing--right" />
+      )}
 
       {ripples.map((r) => (
         <span
