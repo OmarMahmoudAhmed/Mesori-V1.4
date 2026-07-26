@@ -8,7 +8,7 @@
  * =====================================================
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import AppWrapper        from '../components/layout/AppWrapper';
 import Header            from '../components/layout/Header';
 import BottomNav         from '../components/layout/BottomNav';
@@ -17,7 +17,7 @@ import ExplorerCharacter from '../components/shared/ExplorerCharacter';
 import boyAvatar         from '../components/shared/Character1_Pic.png';
 import girlAvatar        from '../components/shared/Character2_Pic.png';
 import { useApp }        from '../context/AppContext';
-import { leaderboardData } from '../data/leaderboard';
+import { supabase }      from '../lib/supabaseClient';
 
 /*
  * مكوّن صغير لأيقونة الكوب حسب نوعه
@@ -51,7 +51,42 @@ function TrophyIcon({ type }) {
 
 function LeaderboardPage() {
 
-  const { goBack, userProfile } = useApp();
+  const { goBack, userProfile, session } = useApp();
+
+  const [players, setPlayers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadLeaderboard() {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('leaderboard')
+        .select('*')
+        .order('rank');
+
+      if (error) {
+        console.error('❌ خطأ في تحميل قائمة المتصدرين:', error);
+        setPlayers([]);
+        setLoading(false);
+        return;
+      }
+
+      const TROPHY_BY_RANK = { 1: 'gold', 2: 'silver', 3: 'bronze' };
+      setPlayers((data || []).map(row => ({
+        id: row.id,
+        rank: row.rank,
+        trophy: TROPHY_BY_RANK[row.rank] || null,
+        avatar: row.character === 'girl' ? 'girl' : 'boy',
+        name: row.username,
+        levelReached: row.level_reached,
+        points: row.total_points,
+        isCurrentUser: row.id === session?.user?.id,
+      })));
+      setLoading(false);
+    }
+
+    loadLeaderboard();
+  }, [session?.user?.id]);
 
   return (
     <AppWrapper>
@@ -127,8 +162,23 @@ function LeaderboardPage() {
           </div>
 
           {/* صفوف اللاعبين */}
+          {loading ? (
+            <p
+              className="text-center text-sm py-8"
+              style={{ fontFamily: "'Cairo', sans-serif", color: '#8B5A2B' }}
+            >
+              جاري تحميل الترتيب...
+            </p>
+          ) : players.length === 0 ? (
+            <p
+              className="text-center text-sm py-8"
+              style={{ fontFamily: "'Cairo', sans-serif", color: '#8B5A2B' }}
+            >
+              لسه محدش ظهر في الترتيب — كن أول اللاعبين!
+            </p>
+          ) : (
           <div className="space-y-1.5">
-            {leaderboardData.map((player) => {
+            {players.map((player) => {
 
               /*
                * isCurrentUser = صحيح للمستخدم الحالي
@@ -244,6 +294,7 @@ function LeaderboardPage() {
               );
             })}
           </div>
+          )}
         </div>
       </main>
 

@@ -10,9 +10,11 @@
  *
  * خارطة البيانات المُدارة هنا:
  * ┌─────────────────────────────────────────┐
- * │  userProfile   → بيانات المستخدم       │
+ * │  session       → جلسة Supabase Auth الحالية│
+ * │  userProfile   → بيانات المستخدم (من profiles)│
  * │  levelsData    → تقدّم المستويات/المراحل│
  * │  completeStage()→ إنهاء مرحلة + فتح التالية│
+ * │  signUp/signIn/signOut/completeOnboarding│
  * │  isSoundOn     → حالة الصوت            │
  * │  currentPage   → الصفحة الحالية        │
  * │  pageData      → بيانات الصفحة         │
@@ -21,8 +23,14 @@
  * │  progressPct   → نسبة التقدم الكلي     │
  * └─────────────────────────────────────────┘
  *
- * عند الترحيل لـ Supabase مستقبلاً:
- * كل useState سيتحول لـ fetch/query من قاعدة البيانات
+ * تسلسل التحميل عند فتح التطبيق:
+ * 1) authLoading: فحص هل فيه جلسة دخول محفوظة (Supabase يحفظها محلياً)
+ * 2) لو فيه جلسة: profileLoading يجيب صف profiles + رتبة المستخدم
+ * 3) بالتوازي (بلا انتظار الجلسة): تحميل levels/stages/questions
+ *    (محتوى عام، متاح للجميع بلا تسجيل دخول)
+ * 4) بمجرد ما (2) و(3) يخلصوا الاثنين: تُطبَّق مراحل المستخدم
+ *    المكتملة سابقاً (user_progress) فوق بنية المحتوى، فتظهر
+ *    المراحل المفتوحة/المكتملة صح من أول ثانية بعد تسجيل الدخول
  * =====================================================
  */
 
@@ -36,6 +44,44 @@ import React, {
 import { levelsData as initialLevelsData } from '../data/levels';
 import { supabase } from '../lib/supabaseClient';
 
+/*
+ * تُعيد حساب حالة "مفتوحة/مقفولة" لكل مستوى ومرحلة من الصفر بناءً
+ * على isCompleted فقط (مصدر الحقيقة الوحيد). تُستخدم في مكانين:
+ * حساب أولي عند تحميل تقدّم قديم من user_progress، وبعد كل
+ * completeStage() (بدل منطق فتح يدوي مبعثر في كل مكان).
+ */
+function computeUnlockedLevels(levelsWithCompletion) {
+  return levelsWithCompletion.map((level, levelIdx) => {
+    const prevLevel = levelIdx > 0 ? levelsWithCompletion[levelIdx - 1] : null;
+    const levelUnlocked = levelIdx === 0 || (prevLevel ? prevLevel.stages.every(s => s.isCompleted) : false);
+
+    const stages = level.stages.map((stage, stageIdx) => ({
+      ...stage,
+      isUnlocked: stageIdx === 0 ? levelUnlocked : level.stages[stageIdx - 1].isCompleted,
+    }));
+
+    return {
+      ...level,
+      isUnlocked: levelUnlocked,
+      stages,
+      earnedPoints: stages.reduce((sum, s) => sum + s.earnedPoints, 0),
+    };
+  });
+}
+
+/* تطبّق صفوف user_progress (من قاعدة البيانات) فوق بنية المحتوى */
+function applyProgressOverlay(levels, progressRows) {
+  const progressMap = new Map(progressRows.map(p => [`${p.level_id}-${p.stage_id}`, p]));
+  const withCompletion = levels.map(level => ({
+    ...level,
+    stages: level.stages.map(stage => {
+      const p = progressMap.get(`${level.id}-${stage.id}`);
+      return { ...stage, isCompleted: p?.is_completed ?? false, earnedPoints: p?.best_score ?? 0 };
+    }),
+  }));
+  return computeUnlockedLevels(withCompletion);
+}
+
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
@@ -43,19 +89,25 @@ export function AppProvider({ children }) {
   // ---- حالة الصوت ----
   const [isSoundOn, setIsSoundOn] = useState(true);
 
-  // ---- بيانات المستخدم ----
+  // ---- جلسة Supabase Auth ----
+  const [session,      setSession]      = useState(null);
+  const [authLoading,  setAuthLoading]  = useState(true);  // فحص الجلسة المحفوظة عند فتح التطبيق
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [contentLoaded,  setContentLoaded]  = useState(false); // هل levels/stages اتحمّلوا من Supabase؟
+
+  // ---- بيانات المستخدم (تُملأ فعلياً من profiles بعد تسجيل الدخول) ----
   const [userProfile, setUserProfile] = useState({
-    id:              'user_001',
-    name:            'مكتشف',
-    age:             10,
-    country:         'مصر',
-    countryFlag:     '🇪🇬',
-    email:           'moktashif@email.com',
-    character:       'boy',
-    currentLevel:    1,
-    completedStages: 2,
-    totalPoints:     300,
-    rank:            12,
+    id:                  null,
+    name:                'مكتشف',
+    age:                 null,
+    country:             'مصر',
+    countryFlag:         '🇪🇬',
+    character:           'boy',
+    currentLevel:        1,
+    completedStages:     0,
+    totalPoints:         0,
+    rank:                null,
+    onboardingCompleted: false,
   });
 
   // ---- حالة المستويات والمراحل ----
@@ -65,6 +117,84 @@ export function AppProvider({ children }) {
   const [currentPage, setCurrentPage] = useState('home');
   const [pageData,    setPageData]    = useState(null);
   const [navHistory, setNavHistory] = useState(['home']);
+
+  // =============================================
+  // إدارة جلسة الدخول (Supabase Auth)
+  // =============================================
+  useEffect(() => {
+    // 1) فحص هل فيه جلسة محفوظة من زيارة سابقة (Supabase بيحفظها في localStorage تلقائياً)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+      if (!session) setProfileLoading(false); // مفيش جلسة = مفيش بروفايل ننتظره
+    });
+
+    // 2) الاستماع لأي تغيير لاحق (تسجيل دخول/خروج/تجديد الجلسة تلقائياً)
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      if (!newSession) {
+        // تسجيل خروج: رجّع البروفايل لحالة فارغة آمنة (الصفحة هترجع لـ Login فوراً)
+        setProfileLoading(true);
+        setUserProfile(prev => ({ ...prev, id: null, onboardingCompleted: false }));
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  // =============================================
+  // تحميل بيانات البروفايل + الترتيب بعد تسجيل الدخول
+  // =============================================
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    async function loadProfile() {
+      setProfileLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (error) {
+          // أول تسجيل قد يسبق الـ trigger بجزء من الثانية في حالات نادرة
+          console.error('❌ خطأ في تحميل البروفايل:', error);
+          return;
+        }
+
+        // الترتيب اختياري (يظهر بس لو المستخدم دخل الـ leaderboard، أي بعد onboarding)
+        let rank = null;
+        if (data.onboarding_completed) {
+          const { data: rankRow } = await supabase
+            .from('leaderboard')
+            .select('rank')
+            .eq('id', session.user.id)
+            .maybeSingle();
+          rank = rankRow?.rank ?? null;
+        }
+
+        setUserProfile(prev => ({
+          ...prev,
+          id:                  data.id,
+          name:                data.username,
+          age:                 data.age,
+          country:             data.country || 'مصر',
+          countryFlag:         data.country_flag || '🇪🇬',
+          character:           data.character,
+          totalPoints:         data.total_points,
+          onboardingCompleted: data.onboarding_completed,
+          rank,
+        }));
+      } catch (err) {
+        console.error('❌ خطأ غير متوقع في تحميل البروفايل:', err);
+      } finally {
+        setProfileLoading(false);
+      }
+    }
+
+    loadProfile();
+  }, [session?.user?.id]);
 
   // =============================================
   // تحميل المستويات والمراحل من Supabase
@@ -168,6 +298,7 @@ export function AppProvider({ children }) {
 
         console.log(`✅ تم تحميل ${formattedLevels.length} مستويات و ${formattedLevels.reduce((acc, l) => acc + l.stages.length, 0)} مراحل.`);
         setLevels(formattedLevels);
+        setContentLoaded(true);
 
       } catch (error) {
         console.error('❌ خطأ غير متوقع في تحميل المستويات:', error);
@@ -176,6 +307,42 @@ export function AppProvider({ children }) {
 
     loadLevels();
   }, []); // [] = يتم التنفيذ مرة واحدة فقط عند تحميل المكون
+
+  // =============================================
+  // تطبيق تقدّم المستخدم السابق (user_progress) فوق المحتوى
+  // =============================================
+  /*
+   * لازم ننتظر الاثنين معاً: المحتوى (levels/stages) والمستخدم
+   * (session)، وإلا لو طبّقنا التقدّم على البيانات الثابتة المؤقتة
+   * (initialLevelsData) قبل ما يوصل محتوى Supabase الحقيقي، هيجي
+   * setLevels(formattedLevels) بعدها ويمسح التقدّم اللي طبّقناه.
+   */
+  useEffect(() => {
+    if (!contentLoaded || !session?.user?.id) return;
+
+    async function loadProgress() {
+      try {
+        const { data, error } = await supabase
+          .from('user_progress')
+          .select('level_id, stage_id, is_completed, best_score')
+          .eq('user_id', session.user.id);
+
+        if (error) {
+          console.error('❌ خطأ في تحميل التقدّم السابق:', error);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          console.log(`✅ تطبيق ${data.length} مرحلة مكتملة سابقاً.`);
+          setLevels(prev => applyProgressOverlay(prev, data));
+        }
+      } catch (err) {
+        console.error('❌ خطأ غير متوقع في تحميل التقدّم:', err);
+      }
+    }
+
+    loadProgress();
+  }, [contentLoaded, session?.user?.id]);
 
   // =============================================
   // الدوال (Functions)
@@ -218,6 +385,52 @@ export function AppProvider({ children }) {
     }));
   }, []);
 
+  // =============================================
+  // دوال المصادقة (Supabase Auth)
+  // =============================================
+  /*
+   * كل دالة بترجع { error } بس (null لو نجحت) — صفحة تسجيل
+   * الدخول/الحساب هي المسؤولة عن عرض رسالة الخطأ للمستخدم.
+   * الملف الشخصي بيتعمل تلقائياً (Trigger في قاعدة البيانات) بمجرد
+   * نجاح signUp، فمفيش داعي نعمل INSERT يدوي هنا.
+   */
+  const signUp = useCallback(async (email, password, name) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
+    // لو الإعدادات في Supabase بتطلب تأكيد بريد إلكتروني، هترجع
+    // user من غير session نشطة لحد ما يضغط رابط التأكيد
+    const needsEmailConfirmation = !error && data?.user && !data?.session;
+    return { error, needsEmailConfirmation };
+  }, []);
+
+  const signIn = useCallback(async (email, password) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error };
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+  }, []);
+
+  /* تُستدعى من شاشة Onboarding بعد اختيار الاسم/العمر/الشخصية */
+  const completeOnboarding = useCallback(async (name, age, character) => {
+    if (!session?.user?.id) {
+      return { error: new Error('لا يوجد مستخدم مسجّل دخول') };
+    }
+    const { error } = await supabase
+      .from('profiles')
+      .update({ username: name, age, character, onboarding_completed: true })
+      .eq('id', session.user.id);
+
+    if (!error) {
+      setUserProfile(prev => ({ ...prev, name, age, character, onboardingCompleted: true }));
+    }
+    return { error };
+  }, [session]);
+
   const completeStage = useCallback((levelId, stageId, earnedPoints) => {
     const level = levels.find(l => l.id === levelId);
     if (!level) return null;
@@ -230,36 +443,28 @@ export function AppProvider({ children }) {
     const bestPoints = Math.max(stage.earnedPoints, earnedPoints);
     const pointsDelta = bestPoints - stage.earnedPoints;
 
-    const newStages = level.stages.map((s, idx) => {
-      if (idx === stageIndex) {
-        return { ...s, isCompleted: true, earnedPoints: bestPoints };
-      }
-      if (wasFirstCompletion && idx === stageIndex + 1) {
-        return { ...s, isUnlocked: true };
-      }
-      return s;
+    // 1) علّم المرحلة كمكتملة، 2) أعد حساب كل حالات الفتح تلقائياً
+    // من الإكمال (نفس الدالة المستخدمة عند تحميل تقدّم قديم) — بدل
+    // منطق فتح يدوي منفصل يسهل إن يتعارض مع بعضه بمرور الوقت.
+    const withCompletion = levels.map(lv => lv.id !== levelId ? lv : {
+      ...lv,
+      stages: lv.stages.map((s, idx) => idx !== stageIndex ? s : { ...s, isCompleted: true, earnedPoints: bestPoints }),
     });
+    const newLevels = computeUnlockedLevels(withCompletion);
+    setLevels(newLevels);
 
-    const isLastStageOfLevel = stageIndex === newStages.length - 1;
-    const allStagesNowCompleted = newStages.every(s => s.isCompleted);
-    const justUnlockedLevelId =
-      (wasFirstCompletion && isLastStageOfLevel && allStagesNowCompleted)
-        ? levelId + 1
-        : null;
-
-    setLevels(prevLevels => prevLevels.map(lv => {
-      if (lv.id === levelId) {
-        return { ...lv, stages: newStages, earnedPoints: lv.earnedPoints + pointsDelta };
+    const newLevel = newLevels.find(l => l.id === levelId);
+    let nextStage = null;
+    let justUnlockedLevelId = null;
+    if (stageIndex + 1 < newLevel.stages.length && newLevel.stages[stageIndex + 1].isUnlocked) {
+      nextStage = { levelId, stageId: newLevel.stages[stageIndex + 1].id };
+    } else {
+      const nextLevel = newLevels.find(l => l.id === levelId + 1);
+      if (nextLevel && nextLevel.isUnlocked && nextLevel.stages.length > 0) {
+        nextStage = { levelId: nextLevel.id, stageId: nextLevel.stages[0].id };
+        if (wasFirstCompletion) justUnlockedLevelId = nextLevel.id;
       }
-      if (justUnlockedLevelId && lv.id === justUnlockedLevelId && lv.stages.length > 0) {
-        return {
-          ...lv,
-          isUnlocked: true,
-          stages: lv.stages.map((s, idx) => idx === 0 ? { ...s, isUnlocked: true } : s),
-        };
-      }
-      return lv;
-    }));
+    }
 
     setUserProfile(prev => ({
       ...prev,
@@ -270,18 +475,23 @@ export function AppProvider({ children }) {
         : prev.currentLevel,
     }));
 
-    let nextStage = null;
-    if (stageIndex + 1 < level.stages.length) {
-      nextStage = { levelId, stageId: level.stages[stageIndex + 1].id };
-    } else if (level.stages.length === stageIndex + 1) {
-      const nextLevel = levels.find(l => l.id === levelId + 1);
-      if (nextLevel && nextLevel.stages.length > 0) {
-        nextStage = { levelId: nextLevel.id, stageId: nextLevel.stages[0].id };
-      }
+    /*
+     * مزامنة مع Supabase (RPC ذرّية تحدّث user_progress + النقاط
+     * معاً — راجع supabase/migrations/002_auth_and_leaderboard.sql).
+     * لا تحجب الواجهة: الحالة المحلية اتحدّثت فعلاً فوق، فلو المستخدم
+     * مش مسجّل دخول (أو الشبكة فصلت لحظياً) اللعب يفضل شغّال، بس
+     * التقدّم مش هيتحفظ لحد ما يرجع يتصل/يسجّل دخول.
+     */
+    if (session?.user?.id) {
+      supabase
+        .rpc('record_stage_progress', { p_level_id: levelId, p_stage_id: stageId, p_score: bestPoints })
+        .then(({ error }) => {
+          if (error) console.error('❌ فشل حفظ التقدّم في Supabase:', error);
+        });
     }
 
     return { wasFirstCompletion, pointsDelta, nextStage, isLastStageOverall: !nextStage };
-  }, [levels]);
+  }, [levels, session]);
 
   const MAX_TOTAL_POINTS  = 500;
   const progressPercentage = Math.min(
@@ -290,6 +500,15 @@ export function AppProvider({ children }) {
   );
 
   const contextValue = {
+    // مصادقة
+    session,
+    authLoading,
+    profileLoading,
+    signUp,
+    signIn,
+    signOut,
+    completeOnboarding,
+    // بيانات المستخدم
     userProfile,
     updateUserProfile,
     addPoints,

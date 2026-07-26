@@ -97,7 +97,7 @@ function StatCard({ icon, iconColor, value, label }) {
 
 function ProfilePage() {
 
-  const { userProfile, updateUserProfile, goBack } = useApp();
+  const { userProfile, updateUserProfile, goBack, signOut } = useApp();
 
   /*
    * editingField - اسم الحقل الذي يجري تعديله حالياً
@@ -335,6 +335,18 @@ function ProfilePage() {
             <StatCard icon="fi-sr-flag-checkered" iconColor="#2D6A3F" value={userProfile.completedStages} label="المراحل المكتملة" />
             <StatCard icon="fi-sr-level-up"      iconColor="#1A7F8E" value={userProfile.currentLevel}    label="المستوى الحالي"  />
           </div>
+        </div>
+
+        {/* تسجيل الخروج */}
+        <div className="px-4 mt-4">
+          <button
+            onClick={signOut}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-bold press-effect no-tap-highlight"
+            style={{ backgroundColor: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)', color: '#DC2626', fontFamily: "'Cairo', sans-serif" }}
+          >
+            <i className="fi fi-rr-sign-out-alt" aria-hidden="true" style={{ fontSize: '14px' }} />
+            <span>تسجيل الخروج</span>
+          </button>
         </div>
 
       </main>
