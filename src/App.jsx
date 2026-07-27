@@ -44,6 +44,8 @@ import QuizGroupPage   from './pages/QuizGroupPage';
 import QuizPage        from './pages/QuizPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import ProfilePage     from './pages/ProfilePage';
+import VsComingSoonPage    from './pages/VsComingSoonPage';
+import DeveloperInfoPage   from './pages/DeveloperInfoPage';
 
 /* شاشة تحميل بسيطة أثناء فحص الجلسة/البروفايل */
 function SplashLoader() {
@@ -110,6 +112,14 @@ function AppContent() {
       case 'profile':
         /* الملف الشخصي والإحصائيات */
         return <ProfilePage />;
+
+      case 'vs-mode':
+        /* نمط 1 ضد 1 (قريباً) */
+        return <VsComingSoonPage />;
+
+      case 'developer-info':
+        /* عن المطوّر (من قائمة الإعدادات) */
+        return <DeveloperInfoPage />;
 
       default:
         /*

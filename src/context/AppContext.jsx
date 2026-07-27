@@ -113,6 +113,13 @@ export function AppProvider({ children }) {
   // ---- حالة المستويات والمراحل ----
   const [levels, setLevels] = useState(initialLevelsData);
 
+  // ---- الشارات المكتسبة ----
+  const [userBadges, setUserBadges] = useState([]); // [{id, title_ar, description_ar, icon, earned_at}]
+
+  // ---- الإشعارات ----
+  const [notifications, setNotifications] = useState([]);
+  const unreadCount = notifications.filter(n => !n.read_at).length;
+
   // ---- نظام التنقل ----
   const [currentPage, setCurrentPage] = useState('home');
   const [pageData,    setPageData]    = useState(null);
@@ -345,6 +352,122 @@ export function AppProvider({ children }) {
   }, [contentLoaded, session?.user?.id]);
 
   // =============================================
+  // تحميل الشارات المكتسبة
+  // =============================================
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setUserBadges([]);
+      return;
+    }
+
+    async function loadBadges() {
+      const { data, error } = await supabase
+        .from('user_badges')
+        .select('badge_id, earned_at, badges (id, title_ar, description_ar, icon)')
+        .eq('user_id', session.user.id)
+        .order('earned_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ خطأ في تحميل الشارات:', error);
+        return;
+      }
+
+      setUserBadges((data || []).map(row => ({
+        id:          row.badges.id,
+        title:       row.badges.title_ar,
+        description: row.badges.description_ar,
+        icon:        row.badges.icon,
+        earnedAt:    row.earned_at,
+      })));
+    }
+
+    loadBadges();
+  }, [session?.user?.id]);
+
+  // =============================================
+  // الإشعارات (تحميل أولي + استماع فوري لأي جديد عبر Supabase Realtime)
+  // =============================================
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setNotifications([]);
+      return;
+    }
+
+    async function loadNotifications() {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (error) {
+        console.error('❌ خطأ في تحميل الإشعارات:', error);
+        return;
+      }
+      setNotifications(data || []);
+    }
+
+    loadNotifications();
+
+    /*
+     * اشتراك فوري: أي إشعار جديد يوصل (رسالة/شارة) يظهر فوراً بدون
+     * ما المستخدم يحدّث الصفحة يدوياً — Supabase Realtime بيبعت
+     * الصف الجديد مباشرة عبر WebSocket.
+     */
+    const channel = supabase
+      .channel(`notifications-${session.user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${session.user.id}`,
+      }, (payload) => {
+        setNotifications(prev => [payload.new, ...prev]);
+
+        // شارة جديدة وصلت الآن؟ حدّث قائمة الشارات فوراً (بدل انتظار
+        // إعادة تحميل الصفحة) عشان تظهر في صفحة البروفايل مباشرة
+        if (payload.new.type === 'badge') {
+          supabase
+            .from('user_badges')
+            .select('badge_id, earned_at, badges (id, title_ar, description_ar, icon)')
+            .eq('user_id', session.user.id)
+            .order('earned_at', { ascending: false })
+            .then(({ data }) => {
+              if (data) {
+                setUserBadges(data.map(row => ({
+                  id: row.badges.id, title: row.badges.title_ar,
+                  description: row.badges.description_ar, icon: row.badges.icon, earnedAt: row.earned_at,
+                })));
+              }
+            });
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session?.user?.id]);
+
+  // =============================================
+  // تتبّع وقت الاستخدام (لشارة "10 ساعات") — نبضة كل دقيقة طالما
+  // الصفحة مفتوحة وفي المقدمة، ونادراً ما تُفقد دقيقة عند الإغلاق
+  // المفاجئ (مقبول لهدف شارة تقريبية، مش سجل دقيق للمحاسبة)
+  // =============================================
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const HEARTBEAT_SECONDS = 60;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        supabase.rpc('track_app_time', { p_seconds: HEARTBEAT_SECONDS })
+          .then(({ error }) => { if (error) console.error('❌ فشل تتبّع وقت الاستخدام:', error); });
+      }
+    }, HEARTBEAT_SECONDS * 1000);
+
+    return () => clearInterval(interval);
+  }, [session?.user?.id]);
+
+  // =============================================
   // الدوال (Functions)
   // =============================================
 
@@ -374,9 +497,36 @@ export function AppProvider({ children }) {
     });
   }, []);
 
+  /*
+   * تحديث أي حقل في البروفايل (الاسم/العمر/الدولة/الأفاتار) — تحديث
+   * محلي فوري (تجربة استخدام سلسة) + مزامنة مع Supabase في الخلفية.
+   * ⚠️ قبل كده كانت هذه الدالة محلية فقط، فتعديلات الملف الشخصي
+   * (بما فيها اختيار الأفاتار) ما كانتش بتتحفظ فعلياً في القاعدة.
+   */
+  const FIELD_TO_COLUMN = {
+    name:      'username',
+    age:       'age',
+    country:   'country',
+    character: 'character',
+  };
+
   const updateUserProfile = useCallback((updates) => {
     setUserProfile(prev => ({ ...prev, ...updates }));
-  }, []);
+
+    if (!session?.user?.id) return; // مسجّل خروج: تحديث محلي فقط (هيُستبدل عند أي دخول لاحق)
+
+    const dbUpdates = {};
+    Object.entries(updates).forEach(([field, value]) => {
+      const column = FIELD_TO_COLUMN[field];
+      if (column) dbUpdates[column] = value;
+    });
+    if (Object.keys(dbUpdates).length === 0) return;
+
+    supabase.from('profiles').update(dbUpdates).eq('id', session.user.id)
+      .then(({ error }) => {
+        if (error) console.error('❌ فشل حفظ تعديل البروفايل:', error);
+      });
+  }, [session]);
 
   const addPoints = useCallback((points) => {
     setUserProfile(prev => ({
@@ -429,6 +579,38 @@ export function AppProvider({ children }) {
       setUserProfile(prev => ({ ...prev, name, age, character, onboardingCompleted: true }));
     }
     return { error };
+  }, [session]);
+
+  // =============================================
+  // الرسائل والمشاركة
+  // =============================================
+  const sendMessage = useCallback(async (recipientId, content) => {
+    const { error } = await supabase.rpc('send_message', {
+      p_recipient_id: recipientId,
+      p_content: content,
+    });
+    return { error };
+  }, []);
+
+  /* تُستدعى من زر "شارك على واتساب" */
+  const trackShare = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const { error } = await supabase.rpc('track_share');
+    if (error) console.error('❌ فشل تسجيل المشاركة:', error);
+  }, [session]);
+
+  const markNotificationRead = useCallback(async (notificationId) => {
+    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read_at: n.read_at || new Date().toISOString() } : n));
+    const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', notificationId);
+    if (error) console.error('❌ فشل تعليم الإشعار كمقروء:', error);
+  }, []);
+
+  const markAllNotificationsRead = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const now = new Date().toISOString();
+    setNotifications(prev => prev.map(n => ({ ...n, read_at: n.read_at || now })));
+    const { error } = await supabase.from('notifications').update({ read_at: now }).eq('user_id', session.user.id).is('read_at', null);
+    if (error) console.error('❌ فشل تعليم كل الإشعارات كمقروءة:', error);
   }, [session]);
 
   const completeStage = useCallback((levelId, stageId, earnedPoints) => {
@@ -514,6 +696,15 @@ export function AppProvider({ children }) {
     addPoints,
     levelsData: levels,
     completeStage,
+    // الشارات
+    userBadges,
+    // الرسائل والإشعارات
+    notifications,
+    unreadCount,
+    sendMessage,
+    trackShare,
+    markNotificationRead,
+    markAllNotificationsRead,
     isSoundOn,
     toggleSound,
     currentPage,

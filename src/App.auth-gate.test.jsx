@@ -31,6 +31,9 @@ vi.mock('./lib/supabaseClient', () => ({
       signInWithPassword: vi.fn(),
       signOut: vi.fn(),
     },
+    rpc: () => Promise.resolve({ error: null }),
+    channel: () => ({ on: () => ({ subscribe: () => {} }) }),
+    removeChannel: () => {},
     from: (table) => {
       if (table === 'levels') {
         return { select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) };
@@ -50,7 +53,15 @@ vi.mock('./lib/supabaseClient', () => ({
       if (table === 'leaderboard') {
         return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null }) }) }) };
       }
-      return { select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) };
+      // user_badges / notifications / أي جدول آخر: select().eq().order()/limit() فاضي
+      const emptyBuilder = {
+        select: () => emptyBuilder,
+        eq: () => emptyBuilder,
+        order: () => emptyBuilder,
+        limit: () => Promise.resolve({ data: [], error: null }),
+        then: (resolve) => resolve({ data: [], error: null }), // يخلي await مباشر يشتغل كمان
+      };
+      return emptyBuilder;
     },
   },
 }));

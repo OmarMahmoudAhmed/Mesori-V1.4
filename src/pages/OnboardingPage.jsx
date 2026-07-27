@@ -11,13 +11,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import boyAvatar  from '../components/shared/Character1_Pic.png';
-import girlAvatar from '../components/shared/Character2_Pic.png';
-
-const CHARACTERS = [
-  { id: 'boy',  label: 'ولد', avatar: boyAvatar },
-  { id: 'girl', label: 'بنت', avatar: girlAvatar },
-];
+import { AVATARS, AvatarDisplay } from '../data/avatars';
 
 function OnboardingPage() {
   const { session, completeOnboarding } = useApp();
@@ -83,26 +77,26 @@ function OnboardingPage() {
             <label className="block font-bold text-sm mb-3" style={{ color: '#3D2B1F' }}>
               اختار شخصيتك
             </label>
-            <div className="grid grid-cols-2 gap-3">
-              {CHARACTERS.map((c) => {
-                const isSelected = character === c.id;
+            <div className="grid grid-cols-3 gap-2.5">
+              {AVATARS.map((a) => {
+                const isSelected = character === a.id;
                 return (
                   <button
-                    key={c.id}
+                    key={a.id}
                     type="button"
-                    onClick={() => setCharacter(c.id)}
-                    className="flex flex-col items-center gap-2 p-3 rounded-2xl press-effect no-tap-highlight"
+                    onClick={() => setCharacter(a.id)}
+                    className="flex flex-col items-center gap-1.5 p-2 rounded-2xl press-effect no-tap-highlight"
                     style={{
                       backgroundColor: isSelected ? 'rgba(45,106,63,0.12)' : 'transparent',
                       border: `2px solid ${isSelected ? '#2D6A3F' : 'rgba(200,146,42,0.25)'}`,
                     }}
                   >
-                    <img src={c.avatar} alt={c.label} className="w-16 h-16 object-contain rounded-full" />
+                    <AvatarDisplay avatarKey={a.id} size={48} />
                     <span
-                      className="font-bold text-sm"
+                      className="font-bold text-xs"
                       style={{ color: isSelected ? '#2D6A3F' : '#8B5A2B' }}
                     >
-                      {c.label}
+                      {a.label}
                     </span>
                   </button>
                 );
@@ -138,7 +132,7 @@ function OnboardingPage() {
               onChange={(e) => setAge(e.target.value)}
               placeholder="مثال: 10"
               min={5}
-              max={100}
+              max={18}
               className="w-full px-4 py-3 rounded-xl text-sm font-semibold outline-none"
               style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(200,146,42,0.3)', color: '#3D2B1F' }}
             />

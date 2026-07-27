@@ -305,6 +305,20 @@ sequenceDiagram
 ---
 
 <a name="later"></a>
+## 9.5. الأفاتار والشارات والرسائل ✅ (منفّذة)
+
+طُبِّقت في `supabase/migrations/003_avatars_badges_messages.sql`:
+
+- **الأفاتار**: `profiles.character` بقى يقبل 6 قيم بدل 2 (راجع `src/data/avatars.jsx` كمصدر واحد للحقيقة، ومكوّن `<AvatarDisplay avatarKey={...}/>` يُستخدم في كل مكان بدل تكرار منطق العرض).
+- **الشارات**: `badges` (تعريفات) + `user_badges` (من كسب إيه)، ممنوحة فقط عبر `award_badge_if_new()`/`check_and_award_badges()` (SECURITY DEFINER) — لا INSERT مباشر لأي دور، فمينفعش مستخدم يمنح نفسه شارة. شارة `ads_5` معرّفة لكن `is_active=false` لحد ما تُبنى ميزة الإعلانات.
+- **الرسائل + الإشعارات**: `messages`/`notifications` بحماية RLS كاملة، إرسال عبر `send_message()` فقط (يتحقق من عدم المراسلة الذاتية والفراغ)، وحذف تلقائي بعد 7 أيام عبر `delete_old_messages_and_notifications()` (مجدولة بـ pg_cron أو Edge Function — راجع `supabase/README.md`).
+- **تتبّع الوقت/المشاركة**: `track_app_time(seconds)` تُستدعى كل 60 ثانية من `AppContext.jsx` طالما الصفحة ظاهرة، و`track_share()` من زر المشاركة في `ProfilePage.jsx` — كلاهما حماية بسيطة من قيم غير منطقية، مش حماية كاملة من العبث المتعمّد.
+
+**ناقص عن قصد (تحتاج خطوة تالية منفصلة):**
+- ربط أزرار الدعم/الاستطلاع في `SettingsDropdown.jsx` بروابطك الحقيقية (حالياً placeholders).
+- بناء ميزة الإعلانات فعلياً (Rewarded Ads) لتفعيل شارة `ads_5`.
+- 1v1 الحقيقي: `VsComingSoonPage.jsx` مجرد بوابة إعلان الآن، والتصميم الكامل في `VS_MODE_GUIDE.md`.
+
 ## 10. حاجات تستاهل تفكّر فيها بعدين
 
 - **إخفاء الإجابة الصحيحة تماماً:** لو حبيت تقفل الثغرة إن `correct_index` ظاهر في DevTools، الحل يبقى RPC function كمان بتاخد إجابة المستخدم وترجّع "صح/غلط" بس، من غير ما الـ`questions` تبعت الإجابة الصحيحة للمتصفح أصلاً. أعقد شوية من المرحلة 4، وممكن نأجّلها لما تحتاجها فعلاً.

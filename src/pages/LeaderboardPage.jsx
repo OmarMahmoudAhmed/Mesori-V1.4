@@ -14,10 +14,10 @@ import Header            from '../components/layout/Header';
 import BottomNav         from '../components/layout/BottomNav';
 import EgyptianLogo      from '../components/shared/EgyptianLogo.png';
 import ExplorerCharacter from '../components/shared/ExplorerCharacter';
-import boyAvatar         from '../components/shared/Character1_Pic.png';
-import girlAvatar        from '../components/shared/Character2_Pic.png';
 import { useApp }        from '../context/AppContext';
 import { supabase }      from '../lib/supabaseClient';
+import { AvatarDisplay } from '../data/avatars';
+import PlayerProfileModal from '../components/leaderboard/PlayerProfileModal';
 
 /*
  * مكوّن صغير لأيقونة الكوب حسب نوعه
@@ -55,6 +55,7 @@ function LeaderboardPage() {
 
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
 
   useEffect(() => {
     async function loadLeaderboard() {
@@ -76,7 +77,7 @@ function LeaderboardPage() {
         id: row.id,
         rank: row.rank,
         trophy: TROPHY_BY_RANK[row.rank] || null,
-        avatar: row.character === 'girl' ? 'girl' : 'boy',
+        avatar: row.character,
         name: row.username,
         levelReached: row.level_reached,
         points: row.total_points,
@@ -189,13 +190,15 @@ function LeaderboardPage() {
               return (
                 <div
                   key={player.id}
-                  className="rounded-xl px-3 py-3 flex items-center"
+                  onClick={() => { if (!isMe) setSelectedPlayer(player); }}
+                  className="rounded-xl px-3 py-3 flex items-center press-effect no-tap-highlight"
                   style={{
                     backgroundColor: isMe
                       ? '#2D6A3F'           /* أخضر للمستخدم الحالي */
                       : player.rank <= 3
                         ? 'rgba(200,146,42,0.08)'  /* ذهبي خفيف للمراكز الأولى */
                         : 'white',
+                    cursor: isMe ? 'default' : 'pointer',
                     border: isMe
                       ? '2px solid #4ADE80'
                       : '1px solid rgba(200,146,42,0.15)',
@@ -229,20 +232,12 @@ function LeaderboardPage() {
                       * overflow-hidden على الحاوية الدائرية هو ما يعمل "القص"
                       */}
                     <div
-                      className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden"
+                      className="rounded-full flex-shrink-0 overflow-hidden"
                       style={{
-                        backgroundColor: isMe
-                          ? 'rgba(255,255,255,0.2)'
-                          : '#F4E2BC',
                         border: `2px solid ${isMe ? 'rgba(255,255,255,0.4)' : 'rgba(200,146,42,0.3)'}`,
                       }}
                     >
-                      <img
-                        src={player.avatar === 'girl' ? girlAvatar : boyAvatar}
-                        alt={player.name}
-                        className="w-full h-full"
-                        style={{ objectFit: 'cover', objectPosition: 'top center' }}
-                      />
+                      <AvatarDisplay avatarKey={player.avatar} size={40} />
                     </div>
 
                     <div>
@@ -299,6 +294,10 @@ function LeaderboardPage() {
       </main>
 
       <BottomNav activePage="leaderboard" />
+
+      {selectedPlayer && (
+        <PlayerProfileModal player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />
+      )}
     </AppWrapper>
   );
 }
