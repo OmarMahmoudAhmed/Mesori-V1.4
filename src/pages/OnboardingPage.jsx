@@ -11,8 +11,13 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import boyAvatar  from '../components/shared/Character1_Pic.png';
+// استبدل سطور الاستيراد هذه:
+import boyAvatar from '../components/shared/Character1_Pic.png';
 import girlAvatar from '../components/shared/Character2_Pic.png';
+
+// بـ:
+const boyAvatar = 'https://via.placeholder.com/64/2D6A3F/FFFFFF?text=👦';
+const girlAvatar = 'https://via.placeholder.com/64/2D6A3F/FFFFFF?text=👧';
 
 const CHARACTERS = [
   { id: 'boy',  label: 'ولد', avatar: boyAvatar },
