@@ -138,7 +138,7 @@ function OnboardingPage() {
               onChange={(e) => setAge(e.target.value)}
               placeholder="مثال: 10"
               min={5}
-              max={18}
+              max={100}
               className="w-full px-4 py-3 rounded-xl text-sm font-semibold outline-none"
               style={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(200,146,42,0.3)', color: '#3D2B1F' }}
             />
