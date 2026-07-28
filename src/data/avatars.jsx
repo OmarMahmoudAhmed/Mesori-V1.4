@@ -25,9 +25,9 @@ import Hatshepsut from '../components/shared/Hatshepsut_Pic.png';
 export const AVATARS = [
   { id: 'boy',     type: 'image', label: 'ولد',     src: boyImage },
   { id: 'girl',    type: 'image', label: 'بنت',     src: girlImage },
-  { id: 'Horus',   type: 'image',  label: 'هوروس',   src: Horus },
+  { id: 'Horus',   type: 'image',  label: 'حورس',   src: Horus },
   { id: 'Isis',    type: 'image',  label: 'إيزيس',   src: Isis },
-  { id: 'Thutmose', type: 'image',  label: 'تحوتمس', src: Thutmose },
+  { id: 'Thutmose', type: 'image',  label: 'تحتمس', src: Thutmose },
   { id: 'Hatshepsut', type: 'image',  label: 'حتشبسوت', src: Hatshepsut },
 ];
 
