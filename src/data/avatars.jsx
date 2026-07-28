@@ -27,7 +27,7 @@ export const AVATARS = [
   { id: 'girl',    type: 'image', label: 'بنت',     src: girlImage },
   { id: 'Horus',   type: 'image',  label: 'هوروس',   src: Horus },
   { id: 'Isis',    type: 'image',  label: 'إيزيس',   src: Isis },
-  { id: 'Thutmose', type: 'image',  label: 'توتموس', src: Thutmose },
+  { id: 'Thutmose', type: 'image',  label: 'تحوتمس', src: Thutmose },
   { id: 'Hatshepsut', type: 'image',  label: 'حتشبسوت', src: Hatshepsut },
 ];
 
