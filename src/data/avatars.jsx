@@ -17,14 +17,18 @@
 import React from 'react';
 import boyImage  from '../components/shared/Character1_Pic.png';
 import girlImage from '../components/shared/Character2_Pic.png';
+import Horus from '../components/shared/Horus_Pic.png';
+import Isis from '../components/shared/Isis_Pic.png';
+import Thutmose from '../components/shared/Thutmose_Pic.png';
+import Hatshepsut from '../components/shared/Hatshepsut_Pic.png';
 
 export const AVATARS = [
   { id: 'boy',     type: 'image', label: 'ولد',     src: boyImage },
   { id: 'girl',    type: 'image', label: 'بنت',     src: girlImage },
-  { id: 'pharaoh', type: 'icon',  label: 'فرعون',   icon: 'fi-sr-crown', color: '#C8922A' },
-  { id: 'anubis',  type: 'icon',  label: 'أنوبيس',  icon: 'fi-sr-dog',   color: '#3D2B1F' },
-  { id: 'scarab',  type: 'icon',  label: 'الجعران', icon: 'fi-sr-bug',   color: '#2D6A3F' },
-  { id: 'ankh',    type: 'icon',  label: 'العنخ',   icon: 'fi-sr-ankh',  color: '#1A7F8E' },
+  { id: 'Horus',   type: 'image',  label: 'هوروس',   src: Horus },
+  { id: 'Isis',    type: 'image',  label: 'إيزيس',   src: Isis },
+  { id: 'Thutmose', type: 'image',  label: 'توتموس', src: Thutmose },
+  { id: 'Hatshepsut', type: 'image',  label: 'حتشبسوت', src: Hatshepsut },
 ];
 
 const AVATAR_BY_ID = Object.fromEntries(AVATARS.map(a => [a.id, a]));
